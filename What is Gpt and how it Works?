@@ -1,0 +1,882 @@
+# GPT: What Is GPT and How Does It Work?
+
+## 1. What is GPT?
+
+**GPT** stands for **Generative Pre-trained Transformer**.
+
+GPT is a type of **Large Language Model (LLM)** designed to understand and generate human-like text.
+
+GPT models are based on the **Transformer architecture**, which was introduced in the research paper **"Attention Is All You Need"** by researchers at Google in 2017.
+
+> **Important:** GPT itself is not designed by Google. The Transformer architecture was introduced by Google researchers, while GPT was developed by **OpenAI**.
+
+### GPT means:
+
+* **Generative** → Generates new text.
+* **Pre-trained** → Learns patterns from a large amount of data before being used for specific tasks.
+* **Transformer** → Uses the Transformer neural-network architecture to understand relationships between tokens.
+
+---
+
+# 2. How Does GPT Work?
+
+At a high level, GPT works like this:
+
+```text
+User Input
+    ↓
+Tokenization
+    ↓
+Token IDs
+    ↓
+Token Embeddings
+    ↓
+Positional Information
+    ↓
+Transformer Blocks
+    ↓
+Self-Attention
+    ↓
+Multi-Head Attention
+    ↓
+Feed-Forward Network
+    ↓
+Next-Token Prediction
+    ↓
+Output Tokens
+    ↓
+Detokenization
+    ↓
+Generated Text
+```
+
+Let's understand each step.
+
+---
+
+# 3. Step 1: Tokenization
+
+The first step is **tokenization**.
+
+A language model does not directly understand raw text. It converts text into smaller units called **tokens**.
+
+A token can be:
+
+* A complete word
+* Part of a word
+* A punctuation mark
+* A special symbol
+
+For example:
+
+```text
+"I love programming!"
+```
+
+could be split approximately into:
+
+```text
+["I", "love", "programming", "!"]
+```
+
+The exact tokens depend on the tokenizer being used.
+
+### Important
+
+GPT does **not** necessarily assign one token to every character.
+
+For example:
+
+```text
+programming
+```
+
+may be represented as one or multiple tokens depending on the tokenizer.
+
+Each token is then converted into a numerical **token ID**.
+
+Example:
+
+```text
+"I"            → 42
+"love"         → 918
+"programming"  → 5231
+"!"            → 7
+```
+
+These numbers are only illustrative.
+
+---
+
+# 4. Step 2: Token Embeddings
+
+The model cannot meaningfully process token IDs such as:
+
+```text
+42, 918, 5231, 7
+```
+
+directly.
+
+Therefore, each token ID is mapped to a high-dimensional numerical vector called an **embedding**.
+
+For example:
+
+```text
+"dog"
+    ↓
+[0.21, -0.45, 0.78, 0.12, ...]
+```
+
+The vector may contain hundreds or thousands of numerical dimensions.
+
+These embeddings allow the model to represent relationships between tokens.
+
+For example, words with related meanings may have related representations:
+
+```text
+king
+queen
+man
+woman
+```
+
+Embeddings are therefore useful for representing semantic and linguistic information in a numerical form.
+
+### General Definition
+
+**Vector embeddings** are numerical representations of data that allow machine-learning models to process, compare, and learn relationships between those representations.
+
+Embeddings can be used for many types of data, including:
+
+* Text
+* Images
+* Audio
+* Documents
+
+In GPT, we are primarily dealing with **text/token representations**.
+
+---
+
+# 5. Step 3: Positional Information
+
+Knowing the tokens is not enough.
+
+The model also needs information about **where each token occurs in the sequence**.
+
+Consider:
+
+```text
+The dog chased the cat.
+```
+
+and:
+
+```text
+The cat chased the dog.
+```
+
+Both sentences contain almost the same words, but their meanings are different because the **order of the words** is different.
+
+Therefore, the Transformer needs positional information.
+
+This is called **positional encoding** or, in modern Transformer designs, more generally **positional information/position representations**.
+
+Conceptually:
+
+```text
+Token Embedding
+       +
+Position Information
+       ↓
+Input Representation
+```
+
+This helps the model distinguish between:
+
+```text
+The dog chased the cat
+```
+
+and:
+
+```text
+The cat chased the dog
+```
+
+---
+
+# 6. Step 4: Self-Attention
+
+One of the most important parts of the Transformer is **self-attention**.
+
+Self-attention allows the model to determine which other tokens are relevant to the current token.
+
+Consider:
+
+```text
+The river bank was beautiful.
+```
+
+Here, the word:
+
+```text
+bank
+```
+
+is related to:
+
+```text
+river
+```
+
+So the model can understand that **bank** probably refers to the side of a river.
+
+Now consider:
+
+```text
+I deposited money in the bank.
+```
+
+Here, **bank** is related to:
+
+```text
+money
+deposited
+```
+
+Therefore, it has a different meaning.
+
+Self-attention helps the model use surrounding context to understand which meaning is appropriate.
+
+---
+
+# 7. How Self-Attention Works
+
+Self-attention uses three important representations:
+
+```text
+Query (Q)
+Key (K)
+Value (V)
+```
+
+The basic idea is:
+
+```text
+Query × Key
+     ↓
+Attention Score
+     ↓
+Softmax
+     ↓
+Weighted Values
+     ↓
+Context-Aware Representation
+```
+
+A simplified attention equation is:
+
+```text
+Attention(Q, K, V)
+=
+softmax(QKᵀ / √dₖ)V
+```
+
+Where:
+
+* **Q** = Query
+* **K** = Key
+* **V** = Value
+* **dₖ** = dimension of the key vectors
+
+The attention mechanism calculates how strongly tokens should attend to one another.
+
+---
+
+# 8. Single-Head Self-Attention
+
+A single attention mechanism can learn relationships between tokens.
+
+For example:
+
+```text
+The dog was sleeping because it was tired.
+```
+
+The model can learn that:
+
+```text
+it
+↓
+dog
+```
+
+is an important relationship.
+
+This allows the model to understand context rather than treating every word independently.
+
+---
+
+# 9. Multi-Head Attention
+
+Instead of using only one attention mechanism, Transformers use multiple attention heads.
+
+This is called:
+
+**Multi-Head Attention**
+
+Each attention head can learn different types of relationships.
+
+For example:
+
+```text
+The dog was sitting in the train because it was tired.
+```
+
+Different attention heads may focus on different relationships such as:
+
+```text
+Head 1 → grammatical relationships
+Head 2 → subject/object relationships
+Head 3 → nearby context
+Head 4 → long-range relationships
+```
+
+These are conceptual examples. The model learns the actual relationships during training.
+
+The outputs from multiple attention heads are combined to create a richer representation.
+
+Conceptually:
+
+```text
+             Input
+               ↓
+      ┌────────┼────────┐
+      ↓        ↓        ↓
+   Head 1    Head 2    Head 3
+      ↓        ↓        ↓
+      └────────┼────────┘
+               ↓
+           Concatenate
+               ↓
+        Linear Projection
+               ↓
+             Output
+```
+
+### Why Multi-Head Attention?
+
+Multi-head attention allows the model to examine the input from multiple learned representation spaces.
+
+This improves the model's ability to capture different contextual relationships.
+
+---
+
+# 10. Step 5: Feed-Forward Network
+
+After the attention mechanism, the Transformer also uses a **Feed-Forward Neural Network**.
+
+Conceptually:
+
+```text
+Attention Output
+       ↓
+Feed-Forward Network
+       ↓
+Transformed Representation
+```
+
+The feed-forward network applies learned transformations to each token representation.
+
+A simplified structure is:
+
+```text
+Input
+  ↓
+Linear Layer
+  ↓
+Activation Function
+  ↓
+Linear Layer
+  ↓
+Output
+```
+
+Transformer blocks also use components such as:
+
+* Residual connections
+* Layer normalization
+
+These help the model train effectively and maintain useful information through many layers.
+
+---
+
+# 11. Step 6: Transformer Blocks
+
+GPT does not use just one attention layer.
+
+It uses many **Transformer blocks stacked together**.
+
+Conceptually:
+
+```text
+Input
+  ↓
+Transformer Block 1
+  ↓
+Transformer Block 2
+  ↓
+Transformer Block 3
+  ↓
+      ...
+  ↓
+Transformer Block N
+  ↓
+Output Representation
+```
+
+Each block processes the representation and gradually builds a richer understanding of the context.
+
+---
+
+# 12. GPT Uses a Decoder-Only Transformer
+
+This is an important concept.
+
+GPT is based on a **decoder-only Transformer architecture**.
+
+It does not use the full encoder-decoder architecture used by the original Transformer in the same way.
+
+GPT primarily uses Transformer **decoder blocks**, with **causal/self-attention**.
+
+Causal attention means that while predicting a token, the model cannot look at future tokens.
+
+For example:
+
+```text
+I am learning
+```
+
+When predicting the next token, the model can see:
+
+```text
+I
+I am
+I am learning
+```
+
+but it cannot see the answer in advance.
+
+This allows GPT to perform **next-token prediction**.
+
+---
+
+# 13. Step 7: Next-Token Prediction
+
+This is the core idea behind GPT.
+
+Suppose the input is:
+
+```text
+The sky is
+```
+
+The model calculates probabilities for possible next tokens:
+
+```text
+blue      → 0.65
+beautiful → 0.12
+clear     → 0.08
+dark      → 0.05
+...
+```
+
+The model then selects a token according to its generation strategy.
+
+For example:
+
+```text
+The sky is blue
+```
+
+Now the model takes the new sequence:
+
+```text
+The sky is blue
+```
+
+and predicts the next token again.
+
+This process continues:
+
+```text
+The
+ ↓
+The sky
+ ↓
+The sky is
+ ↓
+The sky is blue
+ ↓
+The sky is blue today
+ ↓
+...
+```
+
+This is called **autoregressive generation**.
+
+---
+
+# 14. Step 8: Output Layer
+
+After passing through the Transformer blocks, the model produces a representation that is converted into **logits** for possible next tokens.
+
+Conceptually:
+
+```text
+Transformer Output
+       ↓
+Linear Layer
+       ↓
+Logits
+       ↓
+Softmax
+       ↓
+Token Probabilities
+```
+
+For example:
+
+```text
+Token       Probability
+
+blue        0.65
+clear       0.15
+dark        0.08
+beautiful   0.05
+...
+```
+
+The model then chooses a token based on its decoding/generation strategy.
+
+---
+
+# 15. Step 9: Token Generation
+
+Once the model chooses a token, that token is added to the existing sequence.
+
+For example:
+
+```text
+Input:
+What is AI?
+
+Prediction:
+AI
+
+Next prediction:
+is
+
+Next prediction:
+a
+
+Next prediction:
+field
+
+...
+```
+
+The model repeatedly predicts the next token until it reaches a stopping condition.
+
+---
+
+# 16. Step 10: Detokenization
+
+After generating tokens, the tokens need to be converted back into human-readable text.
+
+This process is called **detokenization**.
+
+For example:
+
+```text
+Token IDs
+   ↓
+Tokens
+   ↓
+Text
+```
+
+Conceptually:
+
+```text
+[42, 918, 5231, 7]
+        ↓
+["I", "love", "programming", "!"]
+        ↓
+"I love programming!"
+```
+
+So the final output that the user sees is normal text.
+
+---
+
+# 17. Complete GPT Pipeline
+
+The complete process can be summarized as:
+
+```text
+                 User Prompt
+                      ↓
+                 Tokenization
+                      ↓
+                  Token IDs
+                      ↓
+               Token Embeddings
+                      ↓
+             Positional Information
+                      ↓
+              Transformer Blocks
+                      ↓
+             ┌─────────────────┐
+             │ Self-Attention  │
+             └────────┬────────┘
+                      ↓
+             Multi-Head Attention
+                      ↓
+             Feed-Forward Network
+                      ↓
+              Residual + Norm
+                      ↓
+             More Transformer Blocks
+                      ↓
+                  Logits
+                      ↓
+                  Softmax
+                      ↓
+             Next Token Selection
+                      ↓
+             Repeat Generation
+                      ↓
+                  Tokens
+                      ↓
+                Detokenization
+                      ↓
+                Final Response
+```
+
+---
+
+# 18. How Does GPT Learn?
+
+GPT is trained using a large amount of text data.
+
+During training, the model learns to predict the next token.
+
+For example:
+
+```text
+Input:
+The capital of France is
+
+Target:
+Paris
+```
+
+The model initially makes predictions that may be incorrect.
+
+The difference between the prediction and the expected token is measured using a **loss function**.
+
+The model then updates its parameters using optimization techniques such as **gradient descent** and **backpropagation**.
+
+This process is repeated many times.
+
+Conceptually:
+
+```text
+Training Data
+     ↓
+Tokenization
+     ↓
+Model Prediction
+     ↓
+Calculate Loss
+     ↓
+Backpropagation
+     ↓
+Update Parameters
+     ↓
+Repeat
+```
+
+Over time, the model learns statistical patterns and relationships in the training data.
+
+---
+
+# 19. Pre-training
+
+The word **Pre-trained** in GPT is important.
+
+During pre-training, the model learns general language patterns from a very large training corpus.
+
+It learns patterns related to:
+
+* Grammar
+* Vocabulary
+* Syntax
+* Context
+* Relationships between words
+* Programming patterns
+* General knowledge present in its training data
+
+After pre-training, additional training or alignment techniques may be used to make the model more useful for interacting with users.
+
+---
+
+# 20. Simple Example
+
+Suppose we give GPT:
+
+```text
+The cat is sitting on the
+```
+
+The model processes the tokens and their context.
+
+It may predict:
+
+```text
+mat
+```
+
+Then the sequence becomes:
+
+```text
+The cat is sitting on the mat
+```
+
+The model can then predict another token.
+
+For example:
+
+```text
+The cat is sitting on the mat quietly
+```
+
+The model keeps repeating the process until the response is complete.
+
+---
+
+# 21. Important Corrections to Common Misconceptions
+
+### ❌ GPT does not give one token to every character
+
+Tokens are not necessarily individual characters.
+
+A token can be:
+
+```text
+word
+subword
+punctuation
+special token
+```
+
+The exact tokenization depends on the tokenizer.
+
+---
+
+### ❌ GPT is not designed by Google
+
+The **Transformer architecture** was introduced by Google researchers.
+
+GPT models were developed by **OpenAI**.
+
+---
+
+### ❌ Positional information does not simply "tell the matching word"
+
+Its main purpose is to provide information about the **position/order of tokens**, so the model can distinguish different sequences.
+
+---
+
+### ❌ Self-attention is not simply matching words
+
+Self-attention calculates learned relationships between token representations.
+
+It determines how much information from other tokens should contribute to the representation of a particular token.
+
+---
+
+### ❌ GPT does not directly understand text like a human
+
+GPT processes numerical representations and learned statistical patterns.
+
+The text is converted into tokens and then into numerical representations that the neural network processes.
+
+---
+
+# 22. One-Line Explanation
+
+A simple way to explain GPT is:
+
+> **GPT converts text into tokens, converts those tokens into numerical representations, uses Transformer attention mechanisms to understand their context, and repeatedly predicts the most appropriate next token to generate a response.**
+
+---
+
+# 23. Short Interview Answer
+
+### Question: What is GPT and how does it work?
+
+**Answer:**
+
+GPT stands for **Generative Pre-trained Transformer**. It is a Large Language Model based on the Transformer architecture.
+
+When a user enters text, GPT first **tokenizes** the text into tokens and converts those tokens into numerical embeddings. Positional information is added so the model can understand token order.
+
+The embeddings then pass through multiple **decoder-only Transformer blocks**. These blocks use **causal self-attention and multi-head attention** to understand relationships and context between tokens. The model then produces probabilities for the next possible token.
+
+It selects a token, adds it to the sequence, and repeats the process until the response is complete. Finally, the generated tokens are **detokenized** and converted back into readable text.
+
+---
+
+# 24. Final Summary
+
+```text
+GPT
+│
+├── Generative
+│   └── Generates new content
+│
+├── Pre-trained
+│   └── Learns patterns before deployment
+│
+└── Transformer
+    └── Uses Transformer architecture
+         │
+         ├── Tokenization
+         │
+         ├── Token Embeddings
+         │
+         ├── Positional Information
+         │
+         ├── Causal Self-Attention
+         │
+         ├── Multi-Head Attention
+         │
+         ├── Feed-Forward Network
+         │
+         ├── Multiple Transformer Blocks
+         │
+         ├── Next-Token Prediction
+         │
+         ├── Token Generation
+         │
+         └── Detokenization
+```
+
+## In Simple Words
+
+**Input → Tokens → Embeddings → Position → Attention → Transformer Blocks → Next Token Prediction → Generated Tokens → Text**
+
+This is the basic flow of how a GPT-style language model processes input and generates output.
