@@ -1,0 +1,723 @@
+# LLM Tokenizer From Scratch: Beginner to Advanced
+
+A step-by-step guide to understanding, building, and improving a tokenizer for a Large Language Model (LLM). The tokenizer code in this guide (Sections 3 to 8, 10, and 12) was run and tested with Python 3. The PyTorch dataset snippet in Section 9 is standard code but was not executed while writing this guide, so test it in your own environment.
+
+## Table of Contents
+
+1. [What is a Tokenizer?](#1-what-is-a-tokenizer)
+2. [Roadmap: Levels of Tokenization](#2-roadmap-levels-of-tokenization)
+3. [Level 1: Character-Level Tokenizer (Beginner)](#3-level-1-character-level-tokenizer-beginner)
+4. [Level 2: Word-Level Tokenizer with Special Tokens](#4-level-2-word-level-tokenizer-with-special-tokens)
+5. [Level 3: Understanding BPE (Byte Pair Encoding)](#5-level-3-understanding-bpe-byte-pair-encoding)
+6. [Level 4: Byte-Level BPE From Scratch (Full Code)](#6-level-4-byte-level-bpe-from-scratch-full-code)
+7. [Level 5: Pre-Tokenization with Regex (GPT-2 Style)](#7-level-5-pre-tokenization-with-regex-gpt-2-style)
+8. [Level 6: Special Tokens and Chat Templates](#8-level-6-special-tokens-and-chat-templates)
+9. [Level 7: Turning Tokens into Training Data](#9-level-7-turning-tokens-into-training-data)
+10. [Advanced: Other Algorithms and Libraries](#10-advanced-other-algorithms-and-libraries)
+11. [How to Make Your Tokenization Better](#11-how-to-make-your-tokenization-better)
+12. [How to Evaluate a Tokenizer](#12-how-to-evaluate-a-tokenizer)
+13. [Common Pitfalls](#13-common-pitfalls)
+14. [Practice Exercises](#14-practice-exercises)
+15. [FAQ](#15-faq)
+16. [Resources](#16-resources)
+
+---
+
+## 1. What is a Tokenizer?
+
+A neural network cannot read text. It only works with numbers. A **tokenizer** is the bridge:
+
+```
+"Hello world"  --encode-->  [15496, 995]  --model-->  ...  --decode-->  "Hello world"
+   text                       token IDs                                     text
+```
+
+- **Encode:** text to a list of integer token IDs.
+- **Decode:** token IDs back to text.
+- **Vocabulary:** the full list of tokens the tokenizer knows (each token has a unique ID).
+
+The typical pipeline:
+
+```
+Raw text
+   |
+   v
+1. Normalization      (clean text, e.g. Unicode normalization)
+   |
+   v
+2. Pre-tokenization   (split into chunks: words, numbers, punctuation)
+   |
+   v
+3. Model (e.g. BPE)   (split each chunk into sub-word tokens)
+   |
+   v
+4. Post-processing    (add special tokens like <|endoftext|>)
+   |
+   v
+Token IDs
+```
+
+> **Important:** The tokenizer is trained **separately** from the LLM, and it is fixed before LLM training starts. If you change it later, the model's embeddings no longer match.
+
+---
+
+## 2. Roadmap: Levels of Tokenization
+
+| Level | Method | Vocab size | Good | Bad |
+|---|---|---|---|---|
+| 1 | Character-level | Tiny (~100) | No unknown words | Very long sequences |
+| 2 | Word-level | Huge (100k+) | Short sequences | Unknown words (`<unk>`), huge vocab |
+| 3 to 4 | Sub-word (BPE) | Medium (32k to 200k) | Best balance | Needs training |
+| 4 | Byte-level BPE | 256 + merges | Can encode any text, no unknowns | Slightly longer on rare scripts |
+| 5+ | Regex pre-tokenization, special tokens | Same | Cleaner, better tokens | More design choices |
+
+**Why sub-words?** Common words get their own token (`the`), and rare words are split into pieces (`tokenization` becomes `token` + `ization`). This handles new words without a giant vocabulary.
+
+---
+
+## 3. Level 1: Character-Level Tokenizer (Beginner)
+
+Every unique character is a token.
+
+```python
+text = "hello world"
+
+chars = sorted(set(text))                      # unique characters
+stoi = {c: i for i, c in enumerate(chars)}     # string -> int
+itos = {i: c for c, i in stoi.items()}         # int -> string
+
+encode = lambda s: [stoi[c] for c in s]
+decode = lambda ids: "".join(itos[i] for i in ids)
+
+print(encode("hello"))          # [3, 2, 4, 4, 5]
+print(decode(encode("hello")))  # hello
+```
+
+**Problem:** the sentence "hello world" becomes 11 tokens. Long texts become very long sequences, which makes the model slow and weak at seeing long-range patterns. Also, a character not in `text` causes a `KeyError`.
+
+---
+
+## 4. Level 2: Word-Level Tokenizer with Special Tokens
+
+Split text into words and punctuation, and give each a number. Add **special tokens**:
+
+- `<|unk|>`: replaces unknown words.
+- `<|endoftext|>`: marks the end of a document.
+
+```python
+import re
+
+class SimpleTokenizer:
+    def __init__(self, vocab):
+        self.str_to_int = vocab
+        self.int_to_str = {i: s for s, i in vocab.items()}
+
+    def encode(self, text):
+        tokens = re.split(r'([,.:;?_!"()\']|--|\s)', text)
+        tokens = [t.strip() for t in tokens if t.strip()]
+        tokens = [t if t in self.str_to_int else "<|unk|>" for t in tokens]
+        return [self.str_to_int[t] for t in tokens]
+
+    def decode(self, ids):
+        text = " ".join(self.int_to_str[i] for i in ids)
+        return re.sub(r'\s+([,.?!"()\'])', r'\1', text)   # fix space before punctuation
+
+# Build vocab from a corpus
+corpus = "It's the last he painted, you know. Mrs. Gisburn said so!"
+tokens = [t.strip() for t in re.split(r'([,.:;?_!"()\']|--|\s)', corpus) if t.strip()]
+vocab = {tok: i for i, tok in enumerate(sorted(set(tokens)))}
+vocab["<|endoftext|>"] = len(vocab)
+vocab["<|unk|>"] = len(vocab)
+
+tokenizer = SimpleTokenizer(vocab)
+ids = tokenizer.encode("Hello, do you like tea?")
+print(ids)
+print(tokenizer.decode(ids))   # many words become <|unk|>
+```
+
+**Problems:**
+- Any word not in the training corpus becomes `<|unk|>`, so information is lost.
+- Different forms (`run`, `running`, `runs`) are all separate tokens with no shared meaning.
+- The vocabulary grows very large.
+- Decoding is lossy (spaces and casing get changed).
+
+These problems are why modern LLMs use **sub-word** tokenization.
+
+---
+
+## 5. Level 3: Understanding BPE (Byte Pair Encoding)
+
+**Idea:** Start with the smallest units (characters or bytes). Repeatedly find the **most frequent adjacent pair** and merge it into a **new token**. Repeat until the vocabulary reaches the size you want.
+
+### Tiny worked example
+
+Text: `aaabdaaabac`
+
+| Step | Most frequent pair | New token | Text becomes |
+|---|---|---|---|
+| Start | | | `a a a b d a a a b a c` |
+| 1 | `aa` (appears 4 times) | `Z` | `Z a b d Z a b a c` |
+| 2 | `ab` (appears 2 times) | `Y` | `Z Y d Z Y a c` |
+| 3 | `ZY` (appears 2 times) | `X` | `X d X a c` |
+
+The text went from 11 tokens to 5 tokens, and the **merge list** `[aa->Z, ab->Y, ZY->X]` is the trained tokenizer.
+
+### The two algorithms
+
+**Training** (learn the merges):
+1. Start with every character/byte as a token.
+2. Count all adjacent pairs.
+3. Merge the most frequent pair into a new token.
+4. Repeat until you reach the target vocabulary size.
+
+**Encoding** (use the merges on new text):
+1. Split the text into bytes/characters.
+2. Apply merges **in the same order they were learned**.
+3. The result is the token IDs.
+
+**Decoding:** look up each ID's bytes, join them, and convert to a string.
+
+---
+
+## 6. Level 4: Byte-Level BPE From Scratch (Full Code)
+
+**Byte-level** means we start from the 256 possible byte values instead of characters. Since any text (any language, emoji, code) is made of bytes, this tokenizer **can never produce an unknown token**. GPT-2, GPT-4, Llama 3, and many others use this idea.
+
+Install the one dependency (it supports Unicode regex classes like `\p{L}`):
+
+```bash
+pip install regex
+```
+
+Save this as `bpe_tokenizer.py`:
+
+```python
+"""
+Byte-level BPE tokenizer from scratch (GPT-2 style).
+Requires: pip install regex
+"""
+import json
+from collections import Counter
+
+import regex as re
+
+# GPT-2 style pre-tokenization pattern
+GPT2_PATTERN = (
+    r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+)
+
+
+def merge_pair(ids, pair, new_id):
+    """Replace every occurrence of `pair` in `ids` with `new_id`."""
+    out, i = [], 0
+    while i < len(ids):
+        if i < len(ids) - 1 and ids[i] == pair[0] and ids[i + 1] == pair[1]:
+            out.append(new_id)
+            i += 2
+        else:
+            out.append(ids[i])
+            i += 1
+    return out
+
+
+class BPETokenizer:
+    def __init__(self, pattern=GPT2_PATTERN):
+        self.pattern = re.compile(pattern)
+        self.merges = {}  # (id1, id2) -> new_id, in the order learned
+        self.vocab = {i: bytes([i]) for i in range(256)}  # id -> bytes
+        self.special_tokens = {}  # str -> id
+        self.inv_special = {}  # id -> str
+
+    # ---------------- training ----------------
+    def train(self, text, vocab_size, verbose=False):
+        assert vocab_size >= 256
+        num_merges = vocab_size - 256
+
+        # 1) pre-tokenize, count unique chunks (much faster than raw text)
+        chunks = self.pattern.findall(text)
+        words = Counter(tuple(c.encode("utf-8")) for c in chunks)
+
+        for i in range(num_merges):
+            # 2) count adjacent pairs, weighted by chunk frequency
+            pair_counts = Counter()
+            for word, freq in words.items():
+                for pair in zip(word, word[1:]):
+                    pair_counts[pair] += freq
+            if not pair_counts:
+                break
+
+            # 3) pick most frequent pair, create a new token for it
+            best = max(pair_counts, key=pair_counts.get)
+            new_id = 256 + i
+            self.merges[best] = new_id
+            self.vocab[new_id] = self.vocab[best[0]] + self.vocab[best[1]]
+
+            # 4) apply the merge everywhere
+            new_words = Counter()
+            for word, freq in words.items():
+                new_words[tuple(merge_pair(list(word), best, new_id))] += freq
+            words = new_words
+
+            if verbose:
+                print(
+                    f"merge {i + 1}/{num_merges}: {best} -> {new_id} "
+                    f"({self.vocab[new_id]!r}) count={pair_counts[best]}"
+                )
+
+    def register_special_tokens(self, tokens):
+        start = 256 + len(self.merges)
+        for offset, tok in enumerate(tokens):
+            self.special_tokens[tok] = start + offset
+            self.inv_special[start + offset] = tok
+
+    # ---------------- encoding ----------------
+    def _encode_chunk(self, chunk_bytes):
+        ids = list(chunk_bytes)
+        while len(ids) >= 2:
+            pairs = set(zip(ids, ids[1:]))
+            # apply the earliest-learned merge first
+            best = min(pairs, key=lambda p: self.merges.get(p, float("inf")))
+            if best not in self.merges:
+                break
+            ids = merge_pair(ids, best, self.merges[best])
+        return ids
+
+    def _encode_ordinary(self, text):
+        ids = []
+        for chunk in self.pattern.findall(text):
+            ids.extend(self._encode_chunk(chunk.encode("utf-8")))
+        return ids
+
+    def encode(self, text):
+        if not self.special_tokens:
+            return self._encode_ordinary(text)
+        # split around special tokens so they are never broken up
+        special_pat = "(" + "|".join(re.escape(s) for s in self.special_tokens) + ")"
+        ids = []
+        for part in re.split(special_pat, text):
+            if part in self.special_tokens:
+                ids.append(self.special_tokens[part])
+            elif part:
+                ids.extend(self._encode_ordinary(part))
+        return ids
+
+    # ---------------- decoding ----------------
+    def decode(self, ids):
+        out = []
+        for i in ids:
+            if i in self.vocab:
+                out.append(self.vocab[i])
+            elif i in self.inv_special:
+                out.append(self.inv_special[i].encode("utf-8"))
+            else:
+                raise ValueError(f"unknown token id {i}")
+        return b"".join(out).decode("utf-8", errors="replace")
+
+    # ---------------- save / load ----------------
+    def save(self, path):
+        data = {
+            "pattern": self.pattern.pattern,
+            "merges": [[a, b, idx] for (a, b), idx in self.merges.items()],
+            "special_tokens": self.special_tokens,
+        }
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+    @classmethod
+    def load(cls, path):
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        tok = cls(data["pattern"])
+        for a, b, idx in data["merges"]:
+            tok.merges[(a, b)] = idx
+            tok.vocab[idx] = tok.vocab[a] + tok.vocab[b]
+        tok.special_tokens = data["special_tokens"]
+        tok.inv_special = {v: k for k, v in tok.special_tokens.items()}
+        return tok
+```
+
+### Using it
+
+```python
+from bpe_tokenizer import BPETokenizer
+
+text = open("my_training_data.txt", encoding="utf-8").read()
+
+tok = BPETokenizer()
+tok.train(text, vocab_size=1000, verbose=True)     # learn 744 merges
+tok.register_special_tokens(["<|endoftext|>"])
+
+ids = tok.encode("Hello world! <|endoftext|> नमस्ते 123")
+print(ids)
+print(tok.decode(ids))                             # exact same text back
+
+assert tok.decode(ids) == "Hello world! <|endoftext|> नमस्ते 123"   # lossless round trip
+
+tok.save("tokenizer.json")
+tok = BPETokenizer.load("tokenizer.json")
+```
+
+### Why the code works (key ideas)
+
+| Idea | Why it matters |
+|---|---|
+| Start from 256 bytes | Every possible text can be encoded, so there is no `<unk>` |
+| Count chunks, not raw text | Training is much faster because repeated words are counted once |
+| Merges stored in order | Encoding must replay merges in the same order they were learned |
+| `decode` joins bytes first, then decodes UTF-8 | A single character (like Hindi or emoji) can span several tokens |
+| `errors="replace"` | The model might generate an invalid byte sequence, so decoding must not crash |
+
+### Test results (measured)
+
+On a small text (the GPL-3 license, about 35 KB) with a 400-token vocabulary, the round trip was lossless, including Hindi text and numbers, and save/load gave identical output.
+
+---
+
+## 7. Level 5: Pre-Tokenization with Regex (GPT-2 Style)
+
+If we ran BPE over the raw text, merges could cross word boundaries and create messy tokens like `"dog."` or `"e t"`. To prevent this, we first **split the text into chunks** using a regex, and BPE only merges **inside** each chunk.
+
+```python
+GPT2_PATTERN = r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+```
+
+What each part matches:
+
+| Piece | Matches |
+|---|---|
+| `'s|'t|'re|'ve|'m|'ll|'d` | English contractions (`don't` becomes `don` + `'t`) |
+| ` ?\p{L}+` | Optional leading space + a run of letters (any language) |
+| ` ?\p{N}+` | Optional leading space + a run of digits |
+| ` ?[^\s\p{L}\p{N}]+` | Optional leading space + punctuation/symbols |
+| `\s+(?!\S)` | Whitespace that is followed by more whitespace |
+| `\s+` | Any remaining whitespace |
+
+Example:
+
+```python
+import regex as re
+print(re.findall(GPT2_PATTERN, "Hello world, it's 2025!"))
+# ['Hello', ' world', ',', ' it', "'s", ' 2025', '!']
+```
+
+Notice the **space is attached to the front of the next word** (`' world'`). This is why `"world"` and `" world"` are different tokens in GPT-style models.
+
+---
+
+## 8. Level 6: Special Tokens and Chat Templates
+
+Special tokens are **reserved strings** that are never split and are never learned by BPE. They carry structure.
+
+| Special token | Purpose |
+|---|---|
+| `<|endoftext|>` | Separates documents during training; signals "stop" during generation |
+| `<|pad|>` | Pads shorter sequences in a batch to equal length |
+| `<|unk|>` | Unknown token (rarely needed with byte-level BPE) |
+| `<|bos|>` / `<|eos|>` | Beginning / end of sequence |
+| Role tokens (e.g. `<|user|>`, `<|assistant|>`) | Mark who is speaking in chat models |
+
+Example chat format (yours can differ):
+
+```
+<|user|>What is a tokenizer?<|endoftext|><|assistant|>A tokenizer converts text to numbers.<|endoftext|>
+```
+
+**Tips:**
+- Register special tokens **after** training BPE so they get IDs at the end of the vocabulary.
+- Reserve a few **spare tokens** (e.g. `<|reserved_0|>` to `<|reserved_9|>`) so you can add features later without changing the vocabulary size.
+- Never let user text create special tokens by accident (for example, a user typing `<|endoftext|>`). Decide whether to encode it as plain text or as the special token, and be consistent.
+
+---
+
+## 9. Level 7: Turning Tokens into Training Data
+
+LLMs learn **next-token prediction**. Given a chunk of tokens, the target is the same chunk shifted by one.
+
+```python
+import torch
+from torch.utils.data import Dataset, DataLoader
+
+class TextDataset(Dataset):
+    def __init__(self, token_ids, context_len, stride):
+        self.inputs, self.targets = [], []
+        for i in range(0, len(token_ids) - context_len, stride):
+            self.inputs.append(torch.tensor(token_ids[i : i + context_len]))
+            self.targets.append(torch.tensor(token_ids[i + 1 : i + context_len + 1]))
+
+    def __len__(self):
+        return len(self.inputs)
+
+    def __getitem__(self, idx):
+        return self.inputs[idx], self.targets[idx]
+
+ids = tok.encode(text)
+ds = TextDataset(ids, context_len=128, stride=128)
+loader = DataLoader(ds, batch_size=8, shuffle=True, drop_last=True)
+```
+
+Example with context length 4:
+
+```
+tokens : [10, 20, 30, 40, 50, 60]
+input  : [10, 20, 30, 40]
+target : [20, 30, 40, 50]      <- each position predicts the next token
+```
+
+The size of your vocabulary decides the size of the model's **embedding layer** (`vocab_size x embedding_dim`) and **output layer**, so the tokenizer and the model are directly linked.
+
+---
+
+## 10. Advanced: Other Algorithms and Libraries
+
+### Tokenization algorithms
+
+| Algorithm | How it works | Used by |
+|---|---|---|
+| **BPE** | Merges most frequent pairs | GPT family, Llama, many others |
+| **WordPiece** | Merges pairs that most increase the likelihood of the training data | BERT |
+| **Unigram LM** | Starts with a big vocabulary and **removes** the least useful tokens; can output multiple segmentations | T5, XLNet (through SentencePiece) |
+| **SentencePiece** | A library that works on raw text (treats space as a symbol `_`), so it needs no language-specific pre-tokenization; supports BPE or Unigram | Llama 1/2, T5, many multilingual models |
+
+### Production libraries
+
+| Library | Use |
+|---|---|
+| **Hugging Face `tokenizers`** | Fast (Rust) training of BPE/WordPiece/Unigram tokenizers |
+| **`tiktoken`** | Fast inference for OpenAI-style BPE tokenizers |
+| **`sentencepiece`** | Google's library for BPE/Unigram |
+
+### Train a tokenizer with Hugging Face `tokenizers` (tested)
+
+```bash
+pip install tokenizers
+```
+
+```python
+from tokenizers import Tokenizer, models, trainers, pre_tokenizers, decoders
+
+tok = Tokenizer(models.BPE())
+tok.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
+tok.decoder = decoders.ByteLevel()
+
+trainer = trainers.BpeTrainer(
+    vocab_size=32000,
+    special_tokens=["<|endoftext|>", "<|pad|>"],
+    initial_alphabet=pre_tokenizers.ByteLevel.alphabet(),   # include all 256 bytes
+)
+
+tok.train(["my_training_data.txt"], trainer)   # list of files
+
+enc = tok.encode("Hello world!")
+print(enc.ids)
+print(tok.decode(enc.ids))
+
+tok.save("hf_tokenizer.json")
+```
+
+### Making training faster (for large datasets)
+
+The simple `train()` above recounts all pairs every merge, which is fine for learning but slow on gigabytes of text. Real implementations:
+
+1. **Count pairs incrementally**: after a merge, only update counts for words that contained the merged pair.
+2. **Use a priority queue (heap)** to get the most frequent pair quickly.
+3. **Keep an index** of which words contain each pair.
+4. **Parallelize** pre-tokenization across CPU cores and write in a fast language (Rust/C++), as `tokenizers` and `tiktoken` do.
+5. **Cache** the encoding of frequent words during encoding.
+6. Train on a **representative sample** (for example a few GB) rather than all data.
+
+---
+
+## 11. How to Make Your Tokenization Better
+
+"Better" means: **fewer tokens for the same text, meaningful pieces, and fair treatment of every language and domain you care about.**
+
+### 1. Train the tokenizer on data that looks like your target data
+
+A tokenizer trained on English text will split code, math, or Hindi into many tiny pieces. Use a **mix** that matches what your model will see: for example web text, books, code, and your target languages, in the proportions you care about.
+
+### 2. Choose the vocabulary size deliberately
+
+The table below is a **measured experiment** using my code on the GPL-3 license text (trained on the first 25,000 characters, tested on the unseen rest). Bigger vocabulary gives fewer tokens, but with diminishing returns.
+
+| Vocab size | Tokens for test text | Bytes per token (higher = better compression) |
+|---|---|---|
+| 256 (bytes only) | 10,149 | 1.00 |
+| 300 | 7,323 | 1.39 |
+| 400 | 5,753 | 1.76 |
+| 600 | 4,730 | 2.15 |
+| 1000 | 4,060 | 2.50 |
+
+Trade-offs for real models:
+
+| Bigger vocabulary | Smaller vocabulary |
+|---|---|
+| Shorter sequences (faster attention, more text fits in context) | Longer sequences |
+| Larger embedding and output layers (more parameters and memory) | Smaller embedding layers |
+| Rare tokens get few training examples and stay poorly learned | Every token is seen often |
+
+For reference, common real-world sizes are roughly 32k (Llama 2), about 50k (GPT-2), about 100k (GPT-4 family), and about 128k (Llama 3). Multilingual models usually need larger vocabularies.
+
+### 3. Design the pre-tokenization regex carefully
+
+The regex decides what can ever be inside one token. Ideas to improve it:
+
+- **Split numbers into individual digits** (`2025` becomes `2`, `0`, `2`, `5`). Some model families do this, and it tends to help arithmetic because numbers are represented consistently. Regex example: replace `\p{N}+` with `\p{N}`.
+- **Limit long digit runs** (for example groups of up to 3 digits) as a middle ground.
+- **Keep code indentation efficient**: make sure runs of spaces/tabs can become single tokens, otherwise code becomes very expensive.
+- **Don't merge across newlines and punctuation** unless you want that.
+
+### 4. Normalize text, but be careful
+
+- Use **Unicode normalization (NFC)** so the same character written in two ways gets the same tokens:
+
+  ```python
+  import unicodedata
+  text = unicodedata.normalize("NFC", text)
+  ```
+- Clean control characters and broken encodings.
+- Avoid lowercasing for LLMs unless you have a reason: it destroys information like names and code.
+
+### 5. Balance languages fairly
+
+If a language is rare in your tokenizer training data, its text needs many more tokens (higher **fertility**, see next section). That makes it costlier and lower quality. Fix it by **up-sampling** that language when training the tokenizer.
+
+### 6. Clean and deduplicate the training data
+
+Repeated boilerplate (menus, licenses, spam) creates useless tokens. Very rare or odd strings can become "glitch" tokens that the model barely learns. Deduplicate and filter before training the tokenizer.
+
+### 7. Keep byte-level fallback
+
+Always include all 256 bytes so nothing is ever unknown. If you use SentencePiece, turn on `byte_fallback`.
+
+### 8. Plan special tokens early
+
+Add role tokens, padding, and some reserved slots **before** LLM training. Adding new tokens later means resizing embeddings and training them from scratch.
+
+### 9. Pick a vocabulary size that suits your hardware
+
+Round it to a multiple of 64 (for example 32,000 or 50,304). This makes matrix multiplications on GPUs a bit more efficient.
+
+### 10. Evaluate, change one thing, evaluate again
+
+Use the metrics in the next section on a **held-out** dataset, not the training text.
+
+---
+
+## 12. How to Evaluate a Tokenizer
+
+| Metric | How to compute | What it tells you |
+|---|---|---|
+| **Compression (bytes per token)** | `len(text.encode()) / len(tokens)` | Higher means fewer tokens per text |
+| **Fertility (tokens per word)** | `num_tokens / num_words` | Lower is better; compare across languages |
+| **Round-trip accuracy** | `decode(encode(x)) == x` | Must be 100% |
+| **Unknown token rate** | Share of `<unk>` | Should be 0 for byte-level |
+| **Vocabulary usage** | Share of tokens actually used on held-out data | Many unused tokens means wasted vocabulary |
+| **Speed** | Tokens per second | Matters for large datasets |
+| **Downstream performance** | Train small models with different tokenizers and compare validation loss per byte | The real test |
+
+Quick evaluation code:
+
+```python
+def evaluate(tok, text):
+    ids = tok.encode(text)
+    n_bytes = len(text.encode("utf-8"))
+    n_words = len(text.split())
+    print("tokens          :", len(ids))
+    print("bytes per token :", round(n_bytes / len(ids), 2))
+    print("tokens per word :", round(len(ids) / n_words, 2))
+    print("round trip ok   :", tok.decode(ids) == text)
+    print("vocab used      :", f"{len(set(ids))}/{len(tok.vocab)}")
+
+evaluate(tok, open("held_out.txt", encoding="utf-8").read())
+```
+
+> **Tip:** When comparing tokenizers with different vocabulary sizes, do not compare raw loss per token. Compare **loss per byte** (or bits per byte), because tokens mean different things in each tokenizer.
+
+---
+
+## 13. Common Pitfalls
+
+| Pitfall | What happens | Fix |
+|---|---|---|
+| Space is part of the token | `"hello"` and `" hello"` have different IDs | Be consistent about spaces in prompts and training text |
+| Trailing space in a prompt | Breaks natural token boundaries and can hurt generation | Avoid trailing spaces |
+| Numbers tokenized inconsistently | Model struggles with arithmetic | Split digits |
+| Training the tokenizer on tiny data | Poor merges, weak compression | Use a large, representative sample |
+| Tokenizer/model mismatch | Garbage output | Always ship the exact tokenizer file with the model |
+| Not handling invalid UTF-8 on decode | Crashes | Use `errors="replace"` |
+| Special tokens split by BPE | The model never sees the marker as one unit | Split on special tokens before BPE |
+| Changing tokenizer after pretraining | Embeddings no longer match | Decide before training starts |
+| Ignoring non-English text | Those users pay more and get worse results | Include and up-sample those languages |
+| Comparing tokenizers by loss per token | Misleading | Use loss per byte |
+
+---
+
+## 14. Practice Exercises
+
+**Beginner**
+1. Build the character-level tokenizer and encode/decode a paragraph.
+2. Build the word-level tokenizer and count how many words in a new paragraph become `<|unk|>`.
+3. Do the `aaabdaaabac` BPE example on paper, then try your own string.
+
+**Intermediate**
+4. Train `BPETokenizer` on any text file and print the first 20 merges with `verbose=True`. What do the first merges look like? (Usually a space + a common letter.)
+5. Train with vocab sizes 300, 500, 1000, 2000 and plot bytes per token against vocab size.
+6. Encode a sentence in English, Hindi, and code. Compare the tokens per word.
+7. Add a `<|pad|>` token and write a function that pads a batch of sequences to equal length.
+
+**Advanced**
+8. Change the regex to split digits individually and compare compression on a text full of numbers.
+9. Train the same data with Hugging Face `tokenizers`, compare speed and output with your own version.
+10. Implement the **incremental pair count** optimization and measure the speedup on a large file.
+11. Implement WordPiece or Unigram training.
+12. Train two tiny GPT models with two different tokenizers and compare validation loss **per byte**.
+
+---
+
+## 15. FAQ
+
+**Q1. Why not just use words as tokens?**
+The vocabulary would be huge, and any unseen word would be unknown. Sub-words solve both problems.
+
+**Q2. Why not just use characters?**
+Sequences become very long, which is slow and makes learning long-range patterns harder.
+
+**Q3. Why bytes instead of characters?**
+There are only 256 bytes but over a million possible Unicode characters. Starting from bytes means the tokenizer can encode anything with no unknown tokens.
+
+**Q4. What is the difference between the tokenizer and the embedding layer?**
+The tokenizer turns text into IDs (no learning by gradient descent). The embedding layer turns each ID into a learned vector inside the model.
+
+**Q5. Do I need to train the tokenizer on the same data as the LLM?**
+Ideally on the same distribution (a sample of it). It does not need to be all of it.
+
+**Q6. Can I add new words to the tokenizer later?**
+You can add tokens, but the model must then learn embeddings for them, which needs more training. It is best to plan the vocabulary in advance.
+
+**Q7. Why do LLMs sometimes struggle to count letters or reverse words?**
+The model sees tokens, not letters. `strawberry` may be 2 or 3 tokens, so individual letters are not directly visible to it.
+
+**Q8. What vocabulary size should I start with?**
+For a small learning project, 1,000 to 8,000. For a real general-purpose model, 32,000 to 128,000 or more, depending on languages and domains.
+
+**Q9. Is BPE the best algorithm?**
+It is the most widely used and works well. Unigram and WordPiece are alternatives with different trade-offs. The training data, regex, and vocabulary size often matter more than the choice of algorithm.
+
+**Q10. Should I write my own tokenizer for a real project?**
+Write one to learn. For real projects, use Hugging Face `tokenizers`, `tiktoken`, or `sentencepiece` because they are faster and well tested.
+
+---
+
+## 16. Resources
+
+- **Video:** Andrej Karpathy, "Let's build the GPT Tokenizer" (builds this exact thing step by step)
+- **Code:** Karpathy's `minbpe` repository (clean, educational BPE implementation)
+- **Paper:** *Neural Machine Translation of Rare Words with Subword Units* (Sennrich et al., 2016), which introduced BPE for NLP
+- **Paper:** *SentencePiece* (Kudo and Richardson, 2018)
+- **Book:** *Build a Large Language Model (From Scratch)* by Sebastian Raschka (tokenization chapter)
+- **Docs:** Hugging Face `tokenizers` and course chapter on tokenizers; `tiktoken` on GitHub
+- **Try it live:** OpenAI's online tokenizer tool, to see how real text is split
+
+---
+
+*Suggested learning order: read Sections 1 to 5, run the code in Sections 3 to 4, then build and test Section 6, then experiment with Sections 11 and 12.*
