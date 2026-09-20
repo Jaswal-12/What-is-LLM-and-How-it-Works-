@@ -1,0 +1,185 @@
+A Transformer is a type of neural network architecture, introduced in the 2017 paper "Attention Is All You Need", that is designed to work with sequences such as text. It is the foundation of almost all modern AI language models, including ChatGPT, Claude, Gemini, and BERT.
+
+The problem it solved
+
+Before Transformers, models like RNNs and LSTMs read a sentence one word at a time, in order. This was slow, and they often forgot the beginning of long sentences by the time they reached the end.
+
+The main idea: attention
+
+A Transformer looks at all the words at once and uses self-attention to decide which words matter most to each other. For example, in "The animal didn't cross the street because it was tired," attention helps the model work out that "it" refers to "animal", not "street".
+
+Main parts
+
+Embeddings: convert words into numbers (vectors) that capture their meaning.
+Positional encoding: adds word order information, since the model sees all words at once.
+Self-attention: lets each word look at all the other words for context.
+Feed-forward layers: further process what attention finds.
+Encoder: reads and understands the input.
+Decoder: generates the output one word at a time.
+
+Why it matters
+
+It can process words in parallel, so training is much faster on GPUs.
+It handles long-range context well.
+It scales well: bigger models trained on more data keep getting better.
+
+Types of Transformers
+
+Type	Uses	Examples
+Encoder-only	Understanding text (classification, search)	BERT
+Decoder-only	Generating text	GPT, Claude, Llama
+Encoder-Decoder	Translation, summarization	T5, the original Transformer
+
+The diagram you shared shows the encoder-decoder version, which is the original design.
+
+I can go deeper into self-attention if you'd like, since that is the core of how it works.
+
+
+
+
+
+
+
+
+
+
+# Transformer Architecture Explained (8 Steps)
+
+This document explains how a **Transformer (Encoder–Decoder)** model works using a simple **machine translation** example:
+
+- **Input (English):** `This is an example`
+- **Output (German):** `Das ist ein Beispiel`
+
+The model has two main parts:
+
+- **Encoder** (left side): reads and understands the input sentence.
+- **Decoder** (right side): generates the translated sentence.
+
+---
+
+## Overview Diagram (Text Version)
+
+```
+        ENCODER                               DECODER
+   ┌────────────────┐                   ┌──────────────────────┐
+   │   Embeddings   │ ───────────────►  │ "Das ist ein Beispiel" (8) │
+   ├────────────────┤                   ├──────────────────────┤
+   │    Encoder (3) │                   │    Output Layers     │
+   ├────────────────┤                   ├──────────────────────┤
+   │ Preprocessing  │                   │    Decoder (7)       │
+   │     (2)        │                   ├──────────────────────┤
+   ├────────────────┤                   │ Preprocessing (6)    │
+   │   Input text   │                   ├──────────────────────┤
+   └────────────────┘                   │   Input text (5)     │
+   "This is an example" (1)             └──────────────────────┘
+                                        "Das ist ein" (partial)
+```
+
+---
+
+## Step-by-Step Explanation
+
+### 1️⃣ Input text to be translated
+The process starts with the sentence we want to translate.
+
+> **Example:** `"This is an example"`
+
+This raw text is what the user gives to the model.
+
+---
+
+### 2️⃣ Input text is prepared for the encoder (Preprocessing)
+Computers can't understand raw words, so the text is converted into numbers. Typical preprocessing steps:
+
+- **Tokenization** – split the sentence into tokens (words or sub-words).
+- **Token IDs** – convert each token into a number using a vocabulary.
+- **Positional encoding** – add information about the *position* of each word, since Transformers process all words at once and need to know word order.
+
+---
+
+### 3️⃣ Encoder produces text encodings used by the decoder
+The **encoder** processes the prepared input using:
+
+- **Self-attention** – each word looks at every other word in the sentence to understand context.
+- **Feed-forward layers** – further transform the information.
+
+The result is a set of rich **encodings** that capture the *meaning* of the input sentence.
+
+---
+
+### 4️⃣ Encoder returns embedding vectors as input to the decoder
+The final output of the encoder (context-aware embedding vectors) is passed to the **decoder**.
+
+The decoder uses these vectors (via **cross-attention**) to know *what the source sentence means* while generating the translation.
+
+---
+
+### 5️⃣ Partial output text – the model completes one word at a time
+On the decoder side, the model receives the **words generated so far**.
+
+> **Example:** `"Das ist ein"` (partial translation)
+
+The model is **autoregressive**: it generates the output **one word at a time**, and each new word depends on the previous ones. In the beginning, this input is just a special *start* token.
+
+---
+
+### 6️⃣ Input text is prepared for the decoder (Preprocessing)
+Just like the encoder, the partial output goes through preprocessing:
+
+- Tokenization
+- Conversion to embeddings
+- Positional encoding
+
+This turns the partial German sentence into numbers the decoder can work with.
+
+---
+
+### 7️⃣ Decoder generates the translated text one word at a time
+The **decoder**:
+
+1. Uses **masked self-attention** on the words generated so far (it can't peek at future words).
+2. Uses **cross-attention** to look at the encoder's output (the meaning of the English sentence).
+3. Passes the result through the **output layers** (linear layer + softmax), which produce a probability for every word in the vocabulary.
+4. Picks the most likely next word.
+
+> **Example:** given `"Das ist ein"` → predicts `"Beispiel"`
+
+This loop repeats until the model produces an **end-of-sentence** token.
+
+---
+
+### 8️⃣ The complete output (translation)
+Once all words are generated, we get the final translated sentence.
+
+> **Output:** `"Das ist ein Beispiel"`
+
+---
+
+## Quick Summary Table
+
+| Step | What Happens | Example |
+|------|--------------|---------|
+| 1 | Input text to be translated | `This is an example` |
+| 2 | Preprocessing for encoder (tokenize, embed, positional encoding) | Text → numbers |
+| 3 | Encoder produces text encodings | Context-aware representations |
+| 4 | Encoder passes embedding vectors to decoder | Meaning of input sentence |
+| 5 | Partial output text (one word at a time) | `Das ist ein` |
+| 6 | Preprocessing for decoder | Partial output → numbers |
+| 7 | Decoder generates next word | `Beispiel` |
+| 8 | Complete output (translation) | `Das ist ein Beispiel` |
+
+---
+
+## Key Concepts
+
+- **Encoder** – understands the input.
+- **Decoder** – generates the output.
+- **Self-attention** – lets each word look at other words in the same sentence.
+- **Cross-attention** – lets the decoder look at the encoder's output.
+- **Positional encoding** – tells the model the order of words.
+- **Autoregressive generation** – produces one token at a time, using previous tokens.
+
+---
+
+## Note
+In the original diagram, the partial output is written as `"Das est ein"` — the correct German is **`"Das ist ein"`**.
